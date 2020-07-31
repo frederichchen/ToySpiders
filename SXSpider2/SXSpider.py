@@ -4,7 +4,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver import ActionChains
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.wait import WebDriverWait
 
@@ -51,12 +51,26 @@ class SXSpider:
         """
         items = self.driver.find_elements_by_css_selector('li.op_trust_item')
         for item in items:
-            xm = item.find_element_by_css_selector('span.op_trust_name').text
-            zjhm = item.find_element_by_css_selector('span.op_trust_fl').text
-            # 百度的设置很怪，要点开后才能爬取数据
-            ActionChains(self.driver).click(item).perform()
-            values = item.find_elements_by_css_selector(
-                'tbody td.op_trust_tdRight')
+            try:
+                xm = item.find_element_by_css_selector(
+                    'span.op_trust_name').text
+                zjhm = item.find_element_by_css_selector(
+                    'span.op_trust_fl').text
+                # 百度的设置很怪，要点开后才能爬取数据
+                ActionChains(self.driver).click(item).perform()
+                values = item.find_elements_by_css_selector(
+                    'tbody td.op_trust_tdRight')
+            except StaleElementReferenceException:
+                # 如果出现获取元素失败的问题就休息一秒再度抓取
+                try:
+                    print("出现异常，等待重试...")
+                    time.sleep(1)
+                    ActionChains(self.driver).click(item).perform()
+                    values = item.find_elements_by_css_selector(
+                        'tbody td.op_trust_tdRight')
+                except StaleElementReferenceException:
+                    print("重试失败，跳过该公告...")
+                    continue
             if len(values) == 7:
                 self.fout.write(
                     "'%s','%s','%s','%s','%s','%s','%s','%s','%s','%s'" %
@@ -82,11 +96,11 @@ class SXSpider:
                 next_btn = self.driver.find_element_by_css_selector(
                     'div.op_trust_page span.op_trust_page_next')
                 ActionChains(self.driver).click(next_btn).perform()
-                time.sleep(1)
+                time.sleep(2)
                 pagenum = pagenum + 1
-                self.fetch_page_data()
                 print("------------------------")
                 print("获取第%d页的数据..." % pagenum)
+                self.fetch_page_data()
             except NoSuchElementException:
                 return
         print("完成！")
@@ -95,4 +109,4 @@ class SXSpider:
 if __name__ == "__main__":
     sp = SXSpider()
     sp.open_page()
-    sp.fetch_data(10)
+    sp.fetch_data(3)
